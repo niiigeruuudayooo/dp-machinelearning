@@ -1,121 +1,72 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
 
-st.title('🤖 Machine Learning App')
+st.title("🌫️ Air Quality & Health Predictor (K-Means)")
 
-st.info('This is app builds a machine learning model!')
+st.info("This app clusters air quality data and predicts health impacts like asthma and respiratory disease rates.")
 
-with st.expander('Data'):
-  st.write('**Raw data**')
-  df = pd.read_csv('https://raw.githubusercontent.com/dataprofessor/data/master/penguins_cleaned.csv')
-  df
+# Load your dataset
+@st.cache_data
+def load_data():
+    df = pd.read_csv("your_cleaned_air_health_data.csv")
+    return df
 
-  st.write('**X**')
-  X_raw = df.drop('species', axis=1)
-  X_raw
+df = load_data()
 
-  st.write('**y**')
-  y_raw = df.species
-  y_raw
+with st.expander("View Raw Data"):
+    st.dataframe(df)
 
-with st.expander('Data visualization'):
-  st.scatter_chart(data=df, x='bill_length_mm', y='body_mass_g', color='species')
+# Feature selection
+features = ['NO2', 'O3', 'PM2.5', 'Boiler_Emissions']
+X = df[features]
+health = df[['Asthma_Rate', 'Respiratory_Disease_Rate']]
 
-# Input features
-with st.sidebar:
-  st.header('Input features')
-  island = st.selectbox('Island', ('Biscoe', 'Dream', 'Torgersen'))
-  bill_length_mm = st.slider('Bill length (mm)', 32.1, 59.6, 43.9)
-  bill_depth_mm = st.slider('Bill depth (mm)', 13.1, 21.5, 17.2)
-  flipper_length_mm = st.slider('Flipper length (mm)', 172.0, 231.0, 201.0)
-  body_mass_g = st.slider('Body mass (g)', 2700.0, 6300.0, 4207.0)
-  gender = st.selectbox('Gender', ('male', 'female'))
-  
-  # Create a DataFrame for the input features
-  data = {'island': island,
-          'bill_length_mm': bill_length_mm,
-          'bill_depth_mm': bill_depth_mm,
-          'flipper_length_mm': flipper_length_mm,
-          'body_mass_g': body_mass_g,
-          'sex': gender}
-  input_df = pd.DataFrame(data, index=[0])
-  input_penguins = pd.concat([input_df, X_raw], axis=0)
+# Standardize
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-with st.expander('Input features'):
-  st.write('**Input penguin**')
-  input_df
-  st.write('**Combined penguins data**')
-  input_penguins
+# Apply K-means
+k = 3  # you can make this adjustable via st.slider
+kmeans = KMeans(n_clusters=k, random_state=42)
+clusters = kmeans.fit_predict(X_scaled)
+df['Cluster'] = clusters
 
+# Sidebar for user input
+st.sidebar.header("📥 Input Air Quality Data")
+user_input = {
+    'NO2': st.sidebar.slider("NO2 (ppb)", float(df.NO2.min()), float(df.NO2.max()), float(df.NO2.mean())),
+    'O3': st.sidebar.slider("O3 (ppb)", float(df.O3.min()), float(df.O3.max()), float(df.O3.mean())),
+    'PM2.5': st.sidebar.slider("PM2.5 (µg/m³)", float(df['PM2.5'].min()), float(df['PM2.5'].max()), float(df['PM2.5'].mean())),
+    'Boiler_Emissions': st.sidebar.slider("Boiler Emissions (tons)", float(df['Boiler_Emissions'].min()), float(df['Boiler_Emissions'].max()), float(df['Boiler_Emissions'].mean()))
+}
+input_df = pd.DataFrame(user_input, index=[0])
+input_scaled = scaler.transform(input_df)
 
-# Data preparation
-# Encode X
-encode = ['island', 'sex']
-df_penguins = pd.get_dummies(input_penguins, prefix=encode)
+# Predict cluster
+predicted_cluster = kmeans.predict(input_scaled)[0]
+st.success(f"Predicted Cluster: {predicted_cluster}")
 
-X = df_penguins[1:]
-input_row = df_penguins[:1]
+# Show typical health rates in this cluster
+cluster_avg = df[df['Cluster'] == predicted_cluster][['Asthma_Rate', 'Respiratory_Disease_Rate']].mean()
+st.subheader("🩺 Estimated Health Impact")
+st.write(f"**Estimated Asthma Rate:** {cluster_avg['Asthma_Rate']:.2f}")
+st.write(f"**Estimated Respiratory Disease Rate:** {cluster_avg['Respiratory_Disease_Rate']:.2f}")
 
-# Encode y
-target_mapper = {'Adelie': 0,
-                 'Chinstrap': 1,
-                 'Gentoo': 2}
-def target_encode(val):
-  return target_mapper[val]
-
-y = y_raw.apply(target_encode)
-
-with st.expander('Data preparation'):
-  st.write('**Encoded X (input penguin)**')
-  input_row
-  st.write('**Encoded y**')
-  y
-
-
-# Model training and inference
-## Train the ML model
-clf = RandomForestClassifier()
-clf.fit(X, y)
-
-## Apply model to make predictions
-prediction = clf.predict(input_row)
-prediction_proba = clf.predict_proba(input_row)
-
-df_prediction_proba = pd.DataFrame(prediction_proba)
-df_prediction_proba.columns = ['Adelie', 'Chinstrap', 'Gentoo']
-df_prediction_proba.rename(columns={0: 'Adelie',
-                                 1: 'Chinstrap',
-                                 2: 'Gentoo'})
-
-# Display predicted species
-st.subheader('Predicted Species')
-st.dataframe(df_prediction_proba,
-             column_config={
-               'Adelie': st.column_config.ProgressColumn(
-                 'Adelie',
-                 format='%f',
-                 width='medium',
-                 min_value=0,
-                 max_value=1
-               ),
-               'Chinstrap': st.column_config.ProgressColumn(
-                 'Chinstrap',
-                 format='%f',
-                 width='medium',
-                 min_value=0,
-                 max_value=1
-               ),
-               'Gentoo': st.column_config.ProgressColumn(
-                 'Gentoo',
-                 format='%f',
-                 width='medium',
-                 min_value=0,
-                 max_value=1
-               ),
-             }, hide_index=True)
-
-
-penguins_species = np.array(['Adelie', 'Chinstrap', 'Gentoo'])
-st.success(str(penguins_species[prediction][0]))
+# Optional: Show cluster chart
+with st.expander("📊 Cluster Visualization (PCA)"):
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+    pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
+    pca_df['Cluster'] = clusters
+    fig, ax = plt.subplots()
+    for c in range(k):
+        cluster_data = pca_df[pca_df['Cluster'] == c]
+        ax.scatter(cluster_data['PC1'], cluster_data['PC2'], label=f"Cluster {c}")
+    ax.set_title("Clusters (PCA Projection)")
+    ax.legend()
+    st.pyplot(fig)
