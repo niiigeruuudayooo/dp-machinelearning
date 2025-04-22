@@ -1,67 +1,43 @@
-# streamlit_app.py
-
 import streamlit as st
 import pandas as pd
-import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 
-# ---- Load and Prepare Data ----
+# Load the full health dataset
 @st.cache_data
 def load_data():
-    df = pd.read_csv("merged_health_data.csv")
-    df = df.dropna()
-
-    # Rename for easier reference
-    df = df.rename(columns={
-        "Asthma emergency department visits due to PM2.5": "asthma_rate",
-        "Respiratory hospitalizations due to PM2.5 (age 20+)": "respiratory_rate",
-        "Fine particles (PM 2.5)": "PM2.5",
-        "Nitrogen dioxide (NO2)": "NO2",
-        "Ozone (O3)": "O3",
-        "Boiler Emissions- Total SO2 Emissions": "SO2"
-    })
-
-    return df
+    return pd.read_csv("merged_health_data.csv")
 
 df = load_data()
 
-# ---- Train Models ----
-X = df[["PM2.5", "NO2", "O3", "SO2"]]
-y_asthma = df["asthma_rate"]
-y_resp = df["respiratory_rate"]
+# Drop NAs (in case any)
+df = df.dropna()
 
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+# Display sample
+st.title("🫁 NYC Health Prediction from SO2 Emissions")
+st.write("### Sample of dataset")
+st.dataframe(df.head())
 
-X_train, X_test, y_a_train, y_a_test = train_test_split(X_scaled, y_asthma, test_size=0.2, random_state=42)
-_, _, y_r_train, y_r_test = train_test_split(X_scaled, y_resp, test_size=0.2, random_state=42)
+# Feature and targets
+X = df[["Boiler Emissions- Total SO2 Emissions"]]
+y_asthma = df["Asthma emergency department visits due to PM2.5"]
+y_resp = df["Respiratory hospitalizations due to PM2.5 (age 20+)"]
 
-asthma_model = RandomForestRegressor(n_estimators=100, random_state=42)
-asthma_model.fit(X_train, y_a_train)
+# Train models
+asthma_model = RandomForestRegressor(random_state=0)
+resp_model = RandomForestRegressor(random_state=0)
 
-resp_model = RandomForestRegressor(n_estimators=100, random_state=42)
-resp_model.fit(X_train, y_r_train)
+asthma_model.fit(X, y_asthma)
+resp_model.fit(X, y_resp)
 
-# ---- Streamlit App UI ----
-st.title("🏥 NYC Health Impact Predictor")
-st.markdown("Enter pollutant levels to predict asthma and respiratory hospitalization rates in NYC neighborhoods.")
+# User Input
+st.subheader("🔢 Enter SO2 Emission Level (tons/year)")
+so2_input = st.number_input("Boiler Emissions", min_value=0.0, value=1.0)
 
-# Sidebar inputs
-pm25 = st.slider("PM2.5 (µg/m³)", 0.0, 30.0, 10.0)
-no2 = st.slider("NO2 (ppb)", 0.0, 60.0, 20.0)
-o3 = st.slider("O3 (ppb)", 0.0, 60.0, 25.0)
-so2 = st.slider("SO2 (Boiler Emissions)", 0.0, 100.0, 20.0)
+# Predict on click
+if st.button("Predict Health Rates"):
+    input_val = [[so2_input]]
+    asthma_pred = asthma_model.predict(input_val)[0]
+    resp_pred = resp_model.predict(input_val)[0]
 
-# Prediction
-user_input = np.array([[pm25, no2, o3, so2]])
-user_input_scaled = scaler.transform(user_input)
-
-asthma_pred = asthma_model.predict(user_input_scaled)[0]
-resp_pred = resp_model.predict(user_input_scaled)[0]
-
-# Results
-st.subheader("📈 Predicted Health Outcomes:")
-st.metric("Asthma ED Visit Rate", f"{asthma_pred:.2f}")
-st.metric("Respiratory Hospitalization Rate", f"{resp_pred:.2f}")
+    st.success(f"🌬️ Predicted Asthma ED Visits Rate: **{asthma_pred:.2f}** per 10,000")
+    st.success(f"🫁 Predicted Respiratory Hospitalization Rate: **{resp_pred:.2f}** per 10,000")
