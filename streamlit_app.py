@@ -58,32 +58,32 @@ selected_features = st.multiselect("Choose features:", feature_options, default=
 if not selected_features:
     st.warning("Please select at least one air quality feature.")
 else:
-    # Select features + outcomes
+        # Select features + outcomes
     X = df[selected_features]
-    outcomes = [
-        'Asthma emergency department visits due to PM2.5',
-        'Respiratory hospitalizations due to PM2.5 (age 20+)',
-    ]
 
-    # Scale features
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    # Check if X is empty (i.e., no rows with complete selected features)
+    if X.empty:
+        st.error("Selected features result in no available data. Try selecting fewer features or different ones.")
+    else:
+        # Scale features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
 
-    # Run KMeans
-    k = st.slider("Number of clusters", min_value=2, max_value=6, value=3)
-    model = KMeans(n_clusters=k, random_state=0)
-    df['cluster'] = model.fit_predict(X_scaled)
+        # Run KMeans
+        k = st.slider("Number of clusters", min_value=2, max_value=6, value=3)
+        model = KMeans(n_clusters=k, random_state=0)
+        df['cluster'] = model.fit_predict(X_scaled)
 
-    st.subheader("Clustered Data")
-    st.dataframe(df[['geo_place_name', 'start_date', 'cluster'] + selected_features + outcomes])
+        st.subheader("Clustered Data")
+        st.dataframe(df[['geo_place_name', 'start_date', 'cluster'] + selected_features + outcomes])
 
-    # Visualize cluster centers
-    st.subheader("Cluster Centers")
-    centers = pd.DataFrame(model.cluster_centers_, columns=selected_features)
-    st.write(centers)
+        # Visualize cluster centers
+        st.subheader("Cluster Centers")
+        centers = pd.DataFrame(model.cluster_centers_, columns=selected_features)
+        st.write(centers)
 
-    # Plot clusters
-    st.subheader("Cluster Distribution")
-    fig, ax = plt.subplots()
-    sns.countplot(data=df, x='cluster', ax=ax)
-    st.pyplot(fig)
+        # Plot clusters
+        st.subheader("Cluster Distribution")
+        fig, ax = plt.subplots()
+        sns.countplot(data=df, x='cluster', ax=ax)
+        st.pyplot(fig)
