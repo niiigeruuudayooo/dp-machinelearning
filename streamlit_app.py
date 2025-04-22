@@ -12,7 +12,7 @@ st.info("This app clusters air quality data and predicts health impacts like ast
 # Load your dataset
 @st.cache_data
 def load_data():
-    df = pd.read_csv("your_cleaned_air_health_data.csv")
+    df = pd.read_csv("Air_Quality.csv")
     return df
 
 df = load_data()
