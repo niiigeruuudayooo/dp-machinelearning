@@ -1,57 +1,67 @@
+# streamlit_app.py
+
 import streamlit as st
 import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
-# Load data
+# ---- Load and Prepare Data ----
 @st.cache_data
 def load_data():
-    asthma_df = pd.read_csv("asthma_ed_visits.csv")
-    respiratory_df = pd.read_csv("respiratory_hosp.csv")
-    boiler_df = pd.read_csv("boiler_emissions.csv")
-    pm25_df = pd.read_csv("fine_particles.csv")
-    ozone_df = pd.read_csv("ozone.csv")
-    no2_df = pd.read_csv("nitrogen_dioxide.csv")
-    return asthma_df, respiratory_df, boiler_df, pm25_df, ozone_df, no2_df
+    df = pd.read_csv("combined_pollution_health_data.csv")
+    df = df.dropna()
 
-asthma_df, respiratory_df, boiler_df, pm25_df, ozone_df, no2_df = load_data()
+    # Rename for easier reference
+    df = df.rename(columns={
+        "Asthma emergency department visits due to PM2.5": "asthma_rate",
+        "Respiratory hospitalizations due to PM2.5 (age 20+)": "respiratory_rate",
+        "Fine particles (PM 2.5)": "PM2.5",
+        "Nitrogen dioxide (NO2)": "NO2",
+        "Ozone (O3)": "O3",
+        "Boiler Emissions- Total SO2 Emissions": "SO2"
+    })
 
-# Helper to get the latest value per geo_place_name
-def get_latest_value(df, value_col_name):
-    return df.groupby("geo_place_name")["data_value"].mean().reset_index().rename(columns={"data_value": value_col_name})
+    return df
 
-# Prepare individual datasets (ignore time)
-asthma = get_latest_value(asthma_df, "Asthma ED Visits")
-resp = get_latest_value(respiratory_df, "Resp. Hospitalizations")
-boiler = get_latest_value(boiler_df, "SO2 Emissions")
-pm25 = get_latest_value(pm25_df, "PM2.5")
-ozone = get_latest_value(ozone_df, "Ozone")
-no2 = get_latest_value(no2_df, "NO2")
+df = load_data()
 
-# Merge everything on geo_place_name
-merged = asthma.merge(resp, on="geo_place_name", how="outer")
-merged = merged.merge(boiler, on="geo_place_name", how="outer")
-merged = merged.merge(pm25, on="geo_place_name", how="outer")
-merged = merged.merge(ozone, on="geo_place_name", how="outer")
-merged = merged.merge(no2, on="geo_place_name", how="outer")
+# ---- Train Models ----
+X = df[["PM2.5", "NO2", "O3", "SO2"]]
+y_asthma = df["asthma_rate"]
+y_resp = df["respiratory_rate"]
 
-# Handle missing values
-merged.dropna(inplace=True)
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-# Streamlit app
-st.title("NYC Air Quality & Health Outcomes")
-st.write("This app displays average pollution and health data per location (ignoring time).")
+X_train, X_test, y_a_train, y_a_test = train_test_split(X_scaled, y_asthma, test_size=0.2, random_state=42)
+_, _, y_r_train, y_r_test = train_test_split(X_scaled, y_resp, test_size=0.2, random_state=42)
 
-st.dataframe(merged)
+asthma_model = RandomForestRegressor(n_estimators=100, random_state=42)
+asthma_model.fit(X_train, y_a_train)
 
-# Optional: select location to explore
-location = st.selectbox("Select a location to explore", merged["geo_place_name"].unique())
-row = merged[merged["geo_place_name"] == location].squeeze()
+resp_model = RandomForestRegressor(n_estimators=100, random_state=42)
+resp_model.fit(X_train, y_r_train)
 
-st.subheader(f"📍 Data for: {location}")
-st.write({
-    "Asthma ED Visits": row["Asthma ED Visits"],
-    "Resp. Hospitalizations": row["Resp. Hospitalizations"],
-    "SO2 Emissions": row["SO2 Emissions"],
-    "PM2.5": row["PM2.5"],
-    "Ozone": row["Ozone"],
-    "NO2": row["NO2"]
-})
+# ---- Streamlit App UI ----
+st.title("🏥 NYC Health Impact Predictor")
+st.markdown("Enter pollutant levels to predict asthma and respiratory hospitalization rates in NYC neighborhoods.")
+
+# Sidebar inputs
+pm25 = st.slider("PM2.5 (µg/m³)", 0.0, 30.0, 10.0)
+no2 = st.slider("NO2 (ppb)", 0.0, 60.0, 20.0)
+o3 = st.slider("O3 (ppb)", 0.0, 60.0, 25.0)
+so2 = st.slider("SO2 (Boiler Emissions)", 0.0, 100.0, 20.0)
+
+# Prediction
+user_input = np.array([[pm25, no2, o3, so2]])
+user_input_scaled = scaler.transform(user_input)
+
+asthma_pred = asthma_model.predict(user_input_scaled)[0]
+resp_pred = resp_model.predict(user_input_scaled)[0]
+
+# Results
+st.subheader("📈 Predicted Health Outcomes:")
+st.metric("Asthma ED Visit Rate", f"{asthma_pred:.2f}")
+st.metric("Respiratory Hospitalization Rate", f"{resp_pred:.2f}")
