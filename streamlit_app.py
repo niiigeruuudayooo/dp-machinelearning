@@ -1,72 +1,89 @@
 import streamlit as st
-import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-st.title("🌫️ Air Quality & Health Predictor (K-Means)")
+st.title("Air Quality Clustering & Health Outcome Prediction")
 
-st.info("This app clusters air quality data and predicts health impacts like asthma and respiratory disease rates.")
-
-# Load your dataset
 @st.cache_data
-def load_data():
-    df = pd.read_csv("Air_Quality.csv")
-    return df
+def load_and_prepare_data():
+    # File mapping
+    files = [
+        'asthma_ed_visits.csv',
+        'respiratory_hosp.csv',
+        'boiler_emissions.csv',
+        'fine_particles.csv',
+        'ozone.csv',
+        'nitrogen_dioxide.csv'
+    ]
+    
+    # Load and concatenate
+    all_data = []
+    for f in files:
+        df = pd.read_csv(f, usecols=['name', 'geo_place_name', 'start_date', 'data_value'])
+        df['geo_place_name'] = df['geo_place_name'].str.lower().str.strip()
+        df['start_date'] = pd.to_datetime(df['start_date']).dt.date
+        all_data.append(df)
+    
+    merged = pd.concat(all_data)
 
-df = load_data()
+    # Pivot so each measurement is a column
+    pivot = merged.pivot_table(
+        index=['geo_place_name', 'start_date'],
+        columns='name',
+        values='data_value'
+    ).reset_index()
 
-with st.expander("View Raw Data"):
-    st.dataframe(df)
+    # Drop rows with missing values
+    pivot.dropna(inplace=True)
 
-# Feature selection
-features = ['NO2', 'O3', 'PM2.5', 'Boiler_Emissions']
-X = df[features]
-health = df[['Asthma_Rate', 'Respiratory_Disease_Rate']]
+    return pivot
 
-# Standardize
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
+df = load_and_prepare_data()
 
-# Apply K-means
-k = 3  # you can make this adjustable via st.slider
-kmeans = KMeans(n_clusters=k, random_state=42)
-clusters = kmeans.fit_predict(X_scaled)
-df['Cluster'] = clusters
+st.subheader("Select air quality features to include in the clustering:")
 
-# Sidebar for user input
-st.sidebar.header("📥 Input Air Quality Data")
-user_input = {
-    'NO2': st.sidebar.slider("NO2 (ppb)", float(df.NO2.min()), float(df.NO2.max()), float(df.NO2.mean())),
-    'O3': st.sidebar.slider("O3 (ppb)", float(df.O3.min()), float(df.O3.max()), float(df.O3.mean())),
-    'PM2.5': st.sidebar.slider("PM2.5 (µg/m³)", float(df['PM2.5'].min()), float(df['PM2.5'].max()), float(df['PM2.5'].mean())),
-    'Boiler_Emissions': st.sidebar.slider("Boiler Emissions (tons)", float(df['Boiler_Emissions'].min()), float(df['Boiler_Emissions'].max()), float(df['Boiler_Emissions'].mean()))
-}
-input_df = pd.DataFrame(user_input, index=[0])
-input_scaled = scaler.transform(input_df)
+# Feature options from the actual column names
+feature_options = [
+    'Nitrogen dioxide (NO2)',
+    'Ozone (O3)',
+    'Fine particles (PM 2.5)',
+    'Boiler Emissions- Total SO2 Emissions'
+]
 
-# Predict cluster
-predicted_cluster = kmeans.predict(input_scaled)[0]
-st.success(f"Predicted Cluster: {predicted_cluster}")
+selected_features = st.multiselect("Choose features:", feature_options, default=feature_options)
 
-# Show typical health rates in this cluster
-cluster_avg = df[df['Cluster'] == predicted_cluster][['Asthma_Rate', 'Respiratory_Disease_Rate']].mean()
-st.subheader("🩺 Estimated Health Impact")
-st.write(f"**Estimated Asthma Rate:** {cluster_avg['Asthma_Rate']:.2f}")
-st.write(f"**Estimated Respiratory Disease Rate:** {cluster_avg['Respiratory_Disease_Rate']:.2f}")
+if not selected_features:
+    st.warning("Please select at least one air quality feature.")
+else:
+    # Select features + outcomes
+    X = df[selected_features]
+    outcomes = [
+        'Asthma emergency department visits due to PM2.5',
+        'Respiratory hospitalizations due to PM2.5 (age 20+)',
+    ]
 
-# Optional: Show cluster chart
-with st.expander("📊 Cluster Visualization (PCA)"):
-    from sklearn.decomposition import PCA
-    pca = PCA(n_components=2)
-    X_pca = pca.fit_transform(X_scaled)
-    pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2'])
-    pca_df['Cluster'] = clusters
+    # Scale features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Run KMeans
+    k = st.slider("Number of clusters", min_value=2, max_value=6, value=3)
+    model = KMeans(n_clusters=k, random_state=0)
+    df['cluster'] = model.fit_predict(X_scaled)
+
+    st.subheader("Clustered Data")
+    st.dataframe(df[['geo_place_name', 'start_date', 'cluster'] + selected_features + outcomes])
+
+    # Visualize cluster centers
+    st.subheader("Cluster Centers")
+    centers = pd.DataFrame(model.cluster_centers_, columns=selected_features)
+    st.write(centers)
+
+    # Plot clusters
+    st.subheader("Cluster Distribution")
     fig, ax = plt.subplots()
-    for c in range(k):
-        cluster_data = pca_df[pca_df['Cluster'] == c]
-        ax.scatter(cluster_data['PC1'], cluster_data['PC2'], label=f"Cluster {c}")
-    ax.set_title("Clusters (PCA Projection)")
-    ax.legend()
+    sns.countplot(data=df, x='cluster', ax=ax)
     st.pyplot(fig)
