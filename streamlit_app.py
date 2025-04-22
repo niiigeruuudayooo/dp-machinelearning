@@ -10,7 +10,7 @@ from sklearn.preprocessing import StandardScaler
 # ---- Load and Prepare Data ----
 @st.cache_data
 def load_data():
-    df = pd.read_csv("combined_pollution_health_data.csv")
+    df = pd.read_csv("merged_health_data.csv")
     df = df.dropna()
 
     # Rename for easier reference
