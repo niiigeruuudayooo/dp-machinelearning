@@ -1,89 +1,57 @@
 import streamlit as st
 import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-st.title("Air Quality Clustering & Health Outcome Prediction")
-
+# Load data
 @st.cache_data
-def load_and_prepare_data():
-    # File mapping
-    files = [
-        'asthma_ed_visits.csv',
-        'respiratory_hosp.csv',
-        'boiler_emissions.csv',
-        'fine_particles.csv',
-        'ozone.csv',
-        'nitrogen_dioxide.csv'
-    ]
-    
-    # Load and concatenate
-    all_data = []
-    for f in files:
-        df = pd.read_csv(f, usecols=['name', 'geo_place_name', 'start_date', 'data_value'])
-        df['geo_place_name'] = df['geo_place_name'].str.lower().str.strip()
-        df['start_date'] = pd.to_datetime(df['start_date']).dt.date
-        all_data.append(df)
-    
-    merged = pd.concat(all_data)
+def load_data():
+    asthma_df = pd.read_csv("asthma_ed_visits.csv")
+    respiratory_df = pd.read_csv("respiratory_hosp.csv")
+    boiler_df = pd.read_csv("boiler_emissions.csv")
+    pm25_df = pd.read_csv("fine_particles.csv")
+    ozone_df = pd.read_csv("ozone.csv")
+    no2_df = pd.read_csv("nitrogen_dioxide.csv")
+    return asthma_df, respiratory_df, boiler_df, pm25_df, ozone_df, no2_df
 
-    # Pivot so each measurement is a column
-    pivot = merged.pivot_table(
-        index=['geo_place_name', 'start_date'],
-        columns='name',
-        values='data_value'
-    ).reset_index()
+asthma_df, respiratory_df, boiler_df, pm25_df, ozone_df, no2_df = load_data()
 
-    # Drop rows with missing values
-    pivot.dropna(inplace=True)
+# Helper to get the latest value per geo_place_name
+def get_latest_value(df, value_col_name):
+    return df.groupby("geo_place_name")["data_value"].mean().reset_index().rename(columns={"data_value": value_col_name})
 
-    return pivot
+# Prepare individual datasets (ignore time)
+asthma = get_latest_value(asthma_df, "Asthma ED Visits")
+resp = get_latest_value(respiratory_df, "Resp. Hospitalizations")
+boiler = get_latest_value(boiler_df, "SO2 Emissions")
+pm25 = get_latest_value(pm25_df, "PM2.5")
+ozone = get_latest_value(ozone_df, "Ozone")
+no2 = get_latest_value(no2_df, "NO2")
 
-df = load_and_prepare_data()
+# Merge everything on geo_place_name
+merged = asthma.merge(resp, on="geo_place_name", how="outer")
+merged = merged.merge(boiler, on="geo_place_name", how="outer")
+merged = merged.merge(pm25, on="geo_place_name", how="outer")
+merged = merged.merge(ozone, on="geo_place_name", how="outer")
+merged = merged.merge(no2, on="geo_place_name", how="outer")
 
-st.subheader("Select air quality features to include in the clustering:")
+# Handle missing values
+merged.dropna(inplace=True)
 
-# Feature options from the actual column names
-feature_options = [
-    'Nitrogen dioxide (NO2)',
-    'Ozone (O3)',
-    'Fine particles (PM 2.5)',
-    'Boiler Emissions- Total SO2 Emissions'
-]
+# Streamlit app
+st.title("NYC Air Quality & Health Outcomes")
+st.write("This app displays average pollution and health data per location (ignoring time).")
 
-selected_features = st.multiselect("Choose features:", feature_options, default=feature_options)
+st.dataframe(merged)
 
-if not selected_features:
-    st.warning("Please select at least one air quality feature.")
-else:
-        # Select features + outcomes
-    X = df[selected_features]
+# Optional: select location to explore
+location = st.selectbox("Select a location to explore", merged["geo_place_name"].unique())
+row = merged[merged["geo_place_name"] == location].squeeze()
 
-    # Check if X is empty (i.e., no rows with complete selected features)
-    if X.empty:
-        st.error("Selected features result in no available data. Try selecting fewer features or different ones.")
-    else:
-        # Scale features
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
-        # Run KMeans
-        k = st.slider("Number of clusters", min_value=2, max_value=6, value=3)
-        model = KMeans(n_clusters=k, random_state=0)
-        df['cluster'] = model.fit_predict(X_scaled)
-
-        st.subheader("Clustered Data")
-        st.dataframe(df[['geo_place_name', 'start_date', 'cluster'] + selected_features + outcomes])
-
-        # Visualize cluster centers
-        st.subheader("Cluster Centers")
-        centers = pd.DataFrame(model.cluster_centers_, columns=selected_features)
-        st.write(centers)
-
-        # Plot clusters
-        st.subheader("Cluster Distribution")
-        fig, ax = plt.subplots()
-        sns.countplot(data=df, x='cluster', ax=ax)
-        st.pyplot(fig)
+st.subheader(f"📍 Data for: {location}")
+st.write({
+    "Asthma ED Visits": row["Asthma ED Visits"],
+    "Resp. Hospitalizations": row["Resp. Hospitalizations"],
+    "SO2 Emissions": row["SO2 Emissions"],
+    "PM2.5": row["PM2.5"],
+    "Ozone": row["Ozone"],
+    "NO2": row["NO2"]
+})
