@@ -7,10 +7,10 @@ st.set_page_config(page_title="NYC Health Predictor", layout="centered")
 # Load all pollutant-specific health datasets
 @st.cache_data
 def load_all():
-    so2_df = pd.read_csv("health_data.csv")  # Contains SO2 and health outcomes
-    no2_df = pd.read_csv("no2_health_data.csv")  # Has NO2 + health
-    o3_df = pd.read_csv("o3_health_data.csv")  # Has O3 + health
-    pm25_df = pd.read_csv("pm25_health_data.csv")  # Has PM2.5 + health
+    so2_df = pd.read_csv("boiler_emissions.csv")  # Contains SO2 and health outcomes
+    no2_df = pd.read_csv("nitrogen_dioxide.csv")  # Has NO2 + health
+    o3_df = pd.read_csv("ozone.csv")  # Has O3 + health
+    pm25_df = pd.read_csv("fine_particles.csv")  # Has PM2.5 + health
     return so2_df.dropna(), no2_df.dropna(), o3_df.dropna(), pm25_df.dropna()
 
 so2_df, no2_df, o3_df, pm25_df = load_all()
