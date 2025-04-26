@@ -4,14 +4,18 @@ from sklearn.ensemble import RandomForestRegressor
 
 st.set_page_config(page_title="NYC Health Predictor", layout="centered")
 
-# Load all pollutant-specific health datasets
 @st.cache_data
 def load_all():
-    so2_df = pd.read_csv("boiler_emissions.csv")  # Contains SO2 and health outcomes
-    no2_df = pd.read_csv("nitrogen_dioxide.csv")  # Has NO2 + health
-    o3_df = pd.read_csv("ozone.csv")  # Has O3 + health
-    pm25_df = pd.read_csv("fine_particles.csv")  # Has PM2.5 + health
-    return so2_df.dropna(), no2_df.dropna(), o3_df.dropna(), pm25_df.dropna()
+    def clean_columns(df):
+        df.columns = df.columns.str.strip()
+        return df.dropna()
+
+    so2_df = pd.read_csv("health_data.csv")
+    no2_df = pd.read_csv("no2_health_data.csv")
+    o3_df = pd.read_csv("o3_health_data.csv")
+    pm25_df = pd.read_csv("pm25_health_data.csv")
+
+    return clean_columns(so2_df), clean_columns(no2_df), clean_columns(o3_df), clean_columns(pm25_df)
 
 so2_df, no2_df, o3_df, pm25_df = load_all()
 
