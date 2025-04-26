@@ -2,57 +2,60 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 
-# Load datasets
+# Load merged health dataset
 @st.cache_data
 def load_data():
-    merged_health = pd.read_csv("merged_health_data.csv")
-    pm25 = pd.read_csv("fine_particles.csv")
-    so2 = pd.read_csv("boiler_emissions.csv")
-    no2 = pd.read_csv("nitrogen_dioxide.csv")
-    o3 = pd.read_csv("ozone.csv")
-    return merged_health, pm25, so2, no2, o3
+    return pd.read_csv("merged_health_data.csv")
 
-merged_health, pm25, so2, no2, o3 = load_data()
+df = load_data().dropna()
 
-# Filter pollutant datasets
-pm25 = pm25[pm25["name"] == "Fine particles (PM 2.5)"]
-so2 = so2[so2["name"] == "Boiler Emissions- Total SO2 Emissions"]
-no2 = no2[no2["name"] == "Nitrogen Dioxide (NO2)"]
-o3 = o3[o3["name"] == "Ozone (O3)"]
+st.title("🌫️ PM2.5 Health Impact Prediction + Surrogate Pollutant Test")
+st.write("""
+This app predicts:
+- 🫁 Asthma emergency department visits  
+- 🏥 Respiratory hospitalizations  
 
-# Drop NA in health data
-merged_health = merged_health.dropna()
+based on PM2.5 levels — and optionally tests SO2, NO2, or O3 as substitutes.
+""")
 
-# Prepare training data using PM2.5 as X, health as y
-X_pm25 = merged_health[["Fine particles (PM2.5)"]]
-y_asthma = merged_health["Asthma emergency department visits due to PM2.5"]
-y_resp = merged_health["Respiratory hospitalizations due to PM2.5 (age 20+)"]
+# Targets
+y_asthma = df["Asthma emergency department visits due to PM2.5"]
+y_resp = df["Respiratory hospitalizations due to PM2.5 (age 20+)"]
 
-# Train models
-asthma_model = RandomForestRegressor(random_state=0).fit(X_pm25, y_asthma)
-resp_model = RandomForestRegressor(random_state=0).fit(X_pm25, y_resp)
+# PM2.5 as feature
+X_pm25 = df[["Asthma emergency department visits due to PM2.5"]].rename(
+    columns={"Asthma emergency department visits due to PM2.5": "PM2.5"}
+)
 
-# Streamlit UI
-st.title("🌆 NYC Health Predictions Based on Pollutant Levels")
-st.markdown("Models are trained on PM2.5 data and applied to other pollutants for comparison.")
+# Train model
+asthma_model = RandomForestRegressor(random_state=42)
+resp_model = RandomForestRegressor(random_state=42)
+asthma_model.fit(X_pm25, y_asthma)
+resp_model.fit(X_pm25, y_resp)
 
-# Show SO2 predictions
-st.subheader("🔻 Predicted Health Rates from SO2")
-so2_vals = so2[["geo_place_name", "start_date", "data_value"]].dropna()
-so2_vals["asthma_pred"] = asthma_model.predict(so2_vals[["data_value"]])
-so2_vals["resp_pred"] = resp_model.predict(so2_vals[["data_value"]])
-st.dataframe(so2_vals.head())
+# User input
+st.subheader("🧪 Select Input Type")
+input_type = st.selectbox("Use PM2.5 or test SO2/NO2/O3 as substitutes?", ["PM2.5", "SO2", "NO2", "O3"])
 
-# Show NO2 predictions
-st.subheader("🔻 Predicted Health Rates from NO2")
-no2_vals = no2[["geo_place_name", "start_date", "data_value"]].dropna()
-no2_vals["asthma_pred"] = asthma_model.predict(no2_vals[["data_value"]])
-no2_vals["resp_pred"] = resp_model.predict(no2_vals[["data_value"]])
-st.dataframe(no2_vals.head())
+# Get user input value
+pollutant_value = st.slider(f"{input_type} Level (µg/m³ or tons/year)", min_value=0.0, max_value=150.0, value=20.0)
 
-# Show O3 predictions
-st.subheader("🔻 Predicted Health Rates from O3")
-o3_vals = o3[["geo_place_name", "start_date", "data_value"]].dropna()
-o3_vals["asthma_pred"] = asthma_model.predict(o3_vals[["data_value"]])
-o3_vals["resp_pred"] = resp_model.predict(o3_vals[["data_value"]])
-st.dataframe(o3_vals.head())
+# Predict
+if st.button("🔮 Predict Health Impact"):
+    input_data = [[pollutant_value]]  # Treat any pollutant as "PM2.5" for testing
+    pred_asthma = asthma_model.predict(input_data)[0]
+    pred_resp = resp_model.predict(input_data)[0]
+
+    st.success(f"🫁 Predicted Asthma ED Visits (using {input_type}): **{pred_asthma:.2f}** per 10,000")
+    st.success(f"🏥 Predicted Respiratory Hospitalizations (using {input_type}): **{pred_resp:.2f}** per 10,000")
+
+    # Chart
+    st.subheader("📈 Prediction Summary")
+    st.bar_chart({
+        "Health Outcome": ["Asthma ED Visits", "Respiratory Hospitalizations"],
+        "Prediction": [pred_asthma, pred_resp]
+    })
+
+# Optional: Show dataset
+with st.expander("🗂️ View Data Sample"):
+    st.dataframe(df.head())
