@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import MinMaxScaler
 
 # Load merged health dataset
 @st.cache_data
@@ -33,6 +34,9 @@ resp_model = RandomForestRegressor(random_state=42)
 asthma_model.fit(X_pm25, y_asthma)
 resp_model.fit(X_pm25, y_resp)
 
+# Initialize scaler
+scaler = MinMaxScaler()
+
 # User input
 st.subheader("🧪 Select Input Type")
 input_type = st.selectbox("Use PM2.5 or test SO2/NO2/O3 as substitutes?", ["PM2.5", "SO2", "NO2", "O3"])
@@ -40,9 +44,12 @@ input_type = st.selectbox("Use PM2.5 or test SO2/NO2/O3 as substitutes?", ["PM2.
 # Get user input value
 pollutant_value = st.slider(f"{input_type} Level (µg/m³ or tons/year)", min_value=0.0, max_value=150.0, value=20.0)
 
+# Scale the input value
+scaled_value = scaler.fit_transform([[pollutant_value]])
+
 # Predict
 if st.button("🔮 Predict Health Impact"):
-    input_data = [[pollutant_value]]  # Treat any pollutant as "PM2.5" for testing
+    input_data = [[scaled_value[0][0]]]  # Use the scaled value for prediction
     pred_asthma = asthma_model.predict(input_data)[0]
     pred_resp = resp_model.predict(input_data)[0]
 
