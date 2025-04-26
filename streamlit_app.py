@@ -10,10 +10,10 @@ def load_all():
         df.columns = df.columns.str.strip()
         return df.dropna()
 
-    so2_df = pd.read_csv("health_data.csv")
-    no2_df = pd.read_csv("no2_health_data.csv")
-    o3_df = pd.read_csv("o3_health_data.csv")
-    pm25_df = pd.read_csv("pm25_health_data.csv")
+    so2_df = pd.read_csv("boiler_emissions.csv")
+    no2_df = pd.read_csv("nitrogen_dioxide.csv")
+    o3_df = pd.read_csv("ozone.csv")
+    pm25_df = pd.read_csv("fine_particles.csv")
 
     return clean_columns(so2_df), clean_columns(no2_df), clean_columns(o3_df), clean_columns(pm25_df)
 
