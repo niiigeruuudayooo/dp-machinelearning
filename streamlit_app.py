@@ -96,9 +96,9 @@ if st.button("🔮 Predict PM2.5-related Outcomes"):
     st.subheader("📊 Model Performance Visualization")
     st.pyplot(fig)
     
-    # Show correlation
-    corr_asthma = df[[selected_pollutant, target_asthma[0]].corr().iloc[0,1]
-    corr_resp = df[[selected_pollutant, target_resp[0]].corr().iloc[0,1]
+        # Show correlation
+    corr_asthma = df[[selected_pollutant, target_asthma[0]]].corr().iloc[0,1]
+    corr_resp = df[[selected_pollutant, target_resp[0]]].corr().iloc[0,1]
     
     st.subheader("🔗 Correlation Analysis")
     st.write(f"Correlation between {selected_pollutant} ({pollutant_unit}) and:")
