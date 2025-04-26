@@ -9,63 +9,74 @@ def load_data():
 
 df = load_data().dropna()
 
-st.title("🌫️ PM2.5 Health Impact Prediction + Surrogate Pollutant Test")
+st.title("🌫️ Surrogate Pollutant Impact Analysis")
 st.write("""
-This app predicts:
-- 🫁 Asthma emergency department visits  
-- 🏥 Respiratory hospitalizations  
-
-based on PM2.5 levels — and optionally tests SO2, NO2, or O3 as substitutes.
+This app tests if other pollutants correlate with PM2.5 health outcomes:
+- 🫁 Asthma ED visits (labeled as PM2.5-related)
+- � Hospitalizations (labeled as PM2.5-related)
 """)
 
-# Corrected feature and targets
-X_pm25 = df[["PM2.5"]]  # Assuming "PM2.5" is the column with pollutant levels
-y_asthma = df["Asthma emergency department visits due to PM2.5"]
-y_resp = df["Respiratory hospitalizations due to PM2.5 (age 20+)"]
+# Prepare data
+st.subheader("📊 Your Data Structure")
+st.write("Available columns:", list(df.columns))
 
-# Train model
-asthma_model = RandomForestRegressor(random_state=42)
-resp_model = RandomForestRegressor(random_state=42)
-asthma_model.fit(X_pm25, y_asthma)
-resp_model.fit(X_pm25, y_resp)
+# Use available pollutants as features
+available_pollutants = [
+    'Boiler Emissions- Total SO2 Emissions',
+    # Add other pollutant columns if present in your data:
+    # 'NO2_Emissions', 
+    # 'O3_Levels'
+]
 
-# User input
-st.subheader("🧪 Select Input Type")
-input_type = st.selectbox("Use PM2.5 or test SO2/NO2/O3 as substitutes?", ["PM2.5", "SO2", "NO2", "O3"])
+# Check which pollutants are actually present
+existing_pollutants = [col for col in available_pollutants if col in df.columns]
 
-# Dynamically adjust slider ranges based on pollutant (example ranges)
-pollutant_ranges = {
-    "PM2.5": (0.0, 150.0, 20.0),
-    "SO2": (0.0, 100.0, 15.0),
-    "NO2": (0.0, 200.0, 30.0),
-    "O3": (0.0, 300.0, 50.0)
-}
-min_val, max_val, default_val = pollutant_ranges[input_type]
+# Targets remain PM2.5-related outcomes
+target_asthma = 'Asthma emergency department visits due to PM2.5'
+target_resp = 'Respiratory hospitalizations due to PM2.5 (age 20+)'
 
-pollutant_value = st.slider(
-    f"{input_type} Level (µg/m³)", 
-    min_value=min_val, 
-    max_value=max_val, 
-    value=default_val
+# Model setup
+st.subheader("🧪 Select Analysis Mode")
+selected_pollutant = st.selectbox(
+    "Choose pollutant to test as PM2.5 surrogate:",
+    options=existing_pollutants
 )
 
-# Predict
-if st.button("🔮 Predict Health Impact"):
-    # Treat surrogate pollutant value as PM2.5 input
+# Train model using selected pollutant
+X = df[[selected_pollutant]]
+y_asthma = df[target_asthma]
+y_resp = df[target_resp]
+
+# Model training
+asthma_model = RandomForestRegressor(random_state=42)
+resp_model = RandomForestRegressor(random_state=42)
+asthma_model.fit(X, y_asthma)
+resp_model.fit(X, y_resp)
+
+# User input
+st.subheader("📈 Set Pollution Level")
+pollutant_value = st.slider(
+    f"{selected_pollutant} Level",
+    min_value=float(df[selected_pollutant].min()),
+    max_value=float(df[selected_pollutant].max()),
+    value=float(df[selected_pollutant].median())
+)
+
+# Prediction
+if st.button("🔮 Predict PM2.5-related Outcomes"):
     input_data = [[pollutant_value]]
-    pred_asthma = asthma_model.predict(input_data)[0]
-    pred_resp = resp_model.predict(input_data)[0]
-
-    st.success(f"🫁 Predicted Asthma ED Visits (using {input_type}): **{pred_asthma:.2f}** per 10,000")
-    st.success(f"🏥 Predicted Respiratory Hospitalizations (using {input_type}): **{pred_resp:.2f}** per 10,000")
-
-    # Chart
-    st.subheader("📈 Prediction Summary")
-    st.bar_chart({
-        "Health Outcome": ["Asthma ED Visits", "Respiratory Hospitalizations"],
-        "Prediction": [pred_asthma, pred_resp]
-    })
-
-# Optional: Show dataset
-with st.expander("🗂️ View Data Sample"):
-    st.dataframe(df.head())
+    
+    asthma_pred = asthma_model.predict(input_data)[0]
+    resp_pred = resp_model.predict(input_data)[0]
+    
+    st.success(f"🫁 Predicted Asthma ED Visits: **{asthma_pred:.2f}** per 10k")
+    st.success(f"🏥 Predicted Respiratory Hospitalizations: **{resp_pred:.2f}** per 10k")
+    
+    # Show correlation
+    corr_asthma = df[[selected_pollutant, target_asthma]].corr().iloc[0,1]
+    corr_resp = df[[selected_pollutant, target_resp]].corr().iloc[0,1]
+    
+    st.subheader("🔗 Correlation Analysis")
+    st.write(f"Correlation between {selected_pollutant} and:")
+    st.write(f"- Asthma ED Visits: **{corr_asthma:.2f}**")
+    st.write(f"- Respiratory Hospitalizations: **{corr_resp:.2f}
