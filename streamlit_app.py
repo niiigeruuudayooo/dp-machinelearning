@@ -73,10 +73,10 @@ if st.button("🔮 Predict PM2.5-related Outcomes"):
     st.success(f"🏥 Predicted Respiratory Hospitalizations: **{resp_pred:.2f}** per 10k")
     
     # Show correlation
-    corr_asthma = df[[selected_pollutant, target_asthma]].corr().iloc[0,1]
-    corr_resp = df[[selected_pollutant, target_resp]].corr().iloc[0,1]
-    
-    st.subheader("🔗 Correlation Analysis")
-    st.write(f"Correlation between {selected_pollutant} and:")
-    st.write(f"- Asthma ED Visits: **{corr_asthma:.2f}**")
-    st.write(f"- Respiratory Hospitalizations: **{corr_resp:.2f}
+corr_asthma = df[[selected_pollutant, target_asthma]].corr().iloc[0,1]
+corr_resp = df[[selected_pollutant, target_resp]].corr().iloc[0,1]
+
+st.subheader("🔗 Correlation Analysis")
+st.write(f"Correlation between {selected_pollutant} and:")
+st.write(f"- Asthma ED Visits: **{corr_asthma:.2f}**")
+st.write(f"- Respiratory Hospitalizations: **{corr_resp:.2f}**")
