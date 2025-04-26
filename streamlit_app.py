@@ -3,117 +3,99 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestRegressor
 
-# Load all datasets
+# Load datasets
 @st.cache_data
 def load_data():
-    health_data = pd.read_csv("merged_health_data.csv")
-    no2_data = pd.read_csv("nitrogen_dioxide.csv")
-    o3_data = pd.read_csv("ozone.csv")
-    return health_data, no2_data, o3_data
+    health = pd.read_csv("merged_health_data.csv")
+    no2 = pd.read_csv("nitrogen_dioxide.csv")
+    o3 = pd.read_csv("ozone.csv")
+    return health, no2, o3
 
 health_df, no2_df, o3_df = load_data()
 health_df = health_df.dropna()
 
-st.title("🌍 Cross-Pollutant Health Impact Analysis")
+st.title("🌍 Cross-Pollutant Health Impact Analyzer")
 st.write("""
-Test if PM2.5-trained models respond similarly to other pollutants:
-1. Model trained on PM2.5 health relationships
-2. Apply to NO2/O3 levels as PM2.5 substitutes
+Explore how different pollutants might correlate with PM2.5-related health outcomes
 """)
 
-# Model setup
-st.subheader("🧪 Select Pollutant Type")
-pollutant_type = st.selectbox(
-    "Choose pollutant to test:",
-    options=["PM2.5", "NO2", "O3"]
-)
+# Model training on BOILER EMISSIONS (the only available pollutant in health data)
+st.subheader("🔧 Base Model Setup")
+base_pollutant = 'Boiler Emissions- Total SO2 Emissions'  # Using existing pollutant
+unit = 'tons/year'  # From your health data sample
 
-# Initialize variables
-current_data = health_df
-unit = "µg/m³"
-input_col = "PM2.5"
+# Prepare training data
+X = health_df[[base_pollutant]]
+y_asthma = health_df["Asthma emergency department visits due to PM2.5"]
+y_resp = health_df["Respiratory hospitalizations due to PM2.5 (age 20+)"]
 
-if pollutant_type == "NO2":
-    current_data = no2_df.rename(columns={"data_value": "NO2"})
-    current_data = current_data[current_data['name'] == "Nitrogen dioxide (NO2)"]
-    unit = "ppb"
-    input_col = "NO2"
-elif pollutant_type == "O3":
-    current_data = o3_df.rename(columns={"data_value": "O3"})
-    current_data = current_data[current_data['name'] == "Ozone (O3)"]
-    unit = "ppb"
-    input_col = "O3"
-
-# Get available locations and dates
-locations = current_data['geo_place_name'].unique()
-dates = current_data['start_date'].unique()
-
-# Location/date selection
-col1, col2 = st.columns(2)
-with col1:
-    selected_location = st.selectbox("📍 Select area", locations)
-with col2:
-    selected_date = st.selectbox("📅 Select date", dates)
-
-# Get pollution range
-filtered_data = current_data[
-    (current_data['geo_place_name'] == selected_location) &
-    (current_data['start_date'] == selected_date)
-]
-
-# Train PM2.5 model (from original data)
-pm25_X = health_df[["PM2.5"]]
-pm25_asthma = health_df["Asthma emergency department visits due to PM2.5"]
-pm25_resp = health_df["Respiratory hospitalizations due to PM2.5 (age 20+)"]
-
-asthma_model = RandomForestRegressor(random_state=42).fit(pm25_X, pm25_asthma)
-resp_model = RandomForestRegressor(random_state=42).fit(pm25_X, pm25_resp)
+# Train models
+asthma_model = RandomForestRegressor(random_state=42).fit(X, y_asthma)
+resp_model = RandomForestRegressor(random_state=42).fit(X, y_resp)
 
 # Prediction interface
-st.subheader("🔮 Prediction Simulation")
-base_value = filtered_data[input_col].values[0] if not filtered_data.empty else 0
+st.subheader("🧪 Simulation Parameters")
+pollutant_type = st.selectbox("Choose pollutant to test:", ["SO2", "NO2", "O3"])
 
-pollutant_value = st.slider(
-    f"Adjust {pollutant_type} level ({unit})",
-    min_value=0.0,
-    max_value=50.0 if pollutant_type != "PM2.5" else 150.0,
-    value=float(base_value),
+# Configure based on selected pollutant
+if pollutant_type == "SO2":
+    min_val = float(health_df[base_pollutant].min())
+    max_val = float(health_df[base_pollutant].max())
+    default = float(health_df[base_pollutant].median())
+elif pollutant_type == "NO2":
+    min_val = no2_df['data_value'].min()
+    max_val = no2_df['data_value'].max()
+    default = no2_df['data_value'].median()
+elif pollutant_type == "O3":
+    min_val = o3_df['data_value'].min()
+    max_val = o3_df['data_value'].max()
+    default = o3_df['data_value'].median()
+
+# Get user input
+value = st.slider(
+    f"{pollutant_type} Level ({'tons/year' if pollutant_type == 'SO2' else 'ppb'})",
+    min_value=min_val,
+    max_value=max_val,
+    value=default,
     step=0.1
 )
 
-if st.button("Run Cross-Pollutant Prediction"):
-    # Treat current pollutant value as PM2.5 equivalent
-    input_data = [[pollutant_value]]
+if st.button("Predict Health Outcomes"):
+    # Make predictions using the SO2-trained model
+    input_data = [[value]]
     
     asthma_pred = asthma_model.predict(input_data)[0]
     resp_pred = resp_model.predict(input_data)[0]
     
     # Display results
-    st.success(f"🫁 Predicted Asthma ED Visits (PM2.5-equivalent model): **{asthma_pred:.1f}**/10k")
+    st.success(f"🫁 Predicted Asthma ED Visits: **{asthma_pred:.1f}**/10k")
     st.success(f"🏥 Predicted Respiratory Hospitalizations: **{resp_pred:.1f}**/10k")
     
-    # Comparison visualization
+    # Visualization
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Plot actual PM2.5 relationship
-    ax.scatter(pm25_X, pm25_asthma, alpha=0.3, label="Actual PM2.5 Asthma Cases")
-    ax.scatter(pm25_X, pm25_resp, alpha=0.3, label="Actual PM2.5 Resp. Cases")
+    # Plot actual SO2 relationship
+    ax.scatter(health_df[base_pollutant], y_asthma, alpha=0.3, 
+               label="Actual SO2 Asthma Relationship")
+    ax.scatter(health_df[base_pollutant], y_resp, alpha=0.3,
+               label="Actual SO2 Respiratory Relationship")
     
     # Plot current prediction
-    ax.scatter(pollutant_value, asthma_pred, s=200, marker="X", label="Current Asthma Prediction")
-    ax.scatter(pollutant_value, resp_pred, s=200, marker="X", label="Current Resp. Prediction")
+    ax.scatter(value, asthma_pred, s=200, marker="X", 
+               label=f"Current {pollutant_type} Asthma Prediction")
+    ax.scatter(value, resp_pred, s=200, marker="X",
+               label=f"Current {pollutant_type} Resp. Prediction")
     
-    ax.set_xlabel(f"{pollutant_type} Level ({unit})")
+    ax.set_xlabel(f"{pollutant_type} Level")
     ax.set_ylabel("Health Outcomes per 10k")
-    ax.set_title(f"PM2.5 Model Response to {pollutant_type}")
+    ax.set_title(f"Health Impact Projection using {pollutant_type}")
     ax.legend()
     
     st.pyplot(fig)
 
-# Data disclaimer
 st.markdown("""
 ---
 **🔍 Analysis Note:**  
-This simulation assumes {pollutant_type} levels would impact health outcomes  
-through the same biological pathways as PM2.5. Actual relationships may differ.
+Model trained on boiler SO2 emissions health relationships.  
+Other pollutants tested as potential substitutes through concentration comparison.
 """)
