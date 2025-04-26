@@ -1,55 +1,71 @@
 import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-import matplotlib.pyplot as plt
 
-# Load and cache the data
+st.set_page_config(page_title="NYC Health Predictor", layout="centered")
+
+# Load all pollutant-specific health datasets
 @st.cache_data
-def load_data():
-    return pd.read_csv("merged_health_data.csv")
+def load_all():
+    so2_df = pd.read_csv("health_data.csv")  # Contains SO2 and health outcomes
+    no2_df = pd.read_csv("no2_health_data.csv")  # Has NO2 + health
+    o3_df = pd.read_csv("o3_health_data.csv")  # Has O3 + health
+    pm25_df = pd.read_csv("pm25_health_data.csv")  # Has PM2.5 + health
+    return so2_df.dropna(), no2_df.dropna(), o3_df.dropna(), pm25_df.dropna()
 
-df = load_data()
-df = df.dropna()
+so2_df, no2_df, o3_df, pm25_df = load_all()
 
-# App title
-st.title("🌆 NYC Health Risk Predictor from Air Pollution")
-st.write("Use air quality indicators to predict asthma and respiratory hospitalization rates.")
+# Sidebar selection
+st.sidebar.title("🌫️ Select Pollutant")
+pollutant = st.sidebar.selectbox("Choose pollutant to predict health impact from:", ["SO2", "NO2", "O3", "PM2.5"])
 
-# Select features and targets
-features = ['Boiler Emissions- Total SO2 Emissions', 'PM2.5', 'Ozone', 'NO2']
-target_asthma = 'Asthma emergency department visits due to PM2.5'
-target_respiratory = 'Respiratory hospitalizations due to PM2.5 (age 20+)'
+# Load selected data
+if pollutant == "SO2":
+    df = so2_df
+    X_col = "Boiler Emissions- Total SO2 Emissions"
+elif pollutant == "NO2":
+    df = no2_df
+    X_col = "NO2"
+elif pollutant == "O3":
+    df = o3_df
+    X_col = "Ozone"
+elif pollutant == "PM2.5":
+    df = pm25_df
+    X_col = "PM2.5"
 
-X = df[features]
-y_asthma = df[target_asthma]
-y_respiratory = df[target_respiratory]
+# Show data sample
+st.title("🩺 NYC Health Rate Predictor")
+st.write(f"### Sample data ({pollutant})")
+st.dataframe(df[[X_col, "Asthma emergency department visits due to PM2.5", "Respiratory hospitalizations due to PM2.5 (age 20+)"]].head())
 
 # Train models
+X = df[[X_col]]
+y_asthma = df["Asthma emergency department visits due to PM2.5"]
+y_resp = df["Respiratory hospitalizations due to PM2.5 (age 20+)"]
+
 asthma_model = RandomForestRegressor(random_state=42)
 resp_model = RandomForestRegressor(random_state=42)
+
 asthma_model.fit(X, y_asthma)
-resp_model.fit(X, y_respiratory)
+resp_model.fit(X, y_resp)
 
-# Sidebar for input
-st.sidebar.header("🔧 Enter Pollution Values")
-so2 = st.sidebar.slider("SO2 Emissions (tons/year)", 0.0, 60.0, 10.0)
-pm25 = st.sidebar.slider("PM2.5 (µg/m³)", 0.0, 20.0, 8.0)
-o3 = st.sidebar.slider("Ozone (O3) (ppb)", 0.0, 40.0, 15.0)
-no2 = st.sidebar.slider("NO2 (ppb)", 0.0, 50.0, 20.0)
-
-input_data = pd.DataFrame([[so2, pm25, o3, no2]], columns=features)
+# Input
+st.subheader(f"📥 Enter {pollutant} Level")
+pollutant_input = st.number_input(f"{pollutant} Level", min_value=0.0, value=1.0)
 
 # Predict
-if st.button("📈 Predict Health Outcomes"):
-    pred_asthma = asthma_model.predict(input_data)[0]
-    pred_resp = resp_model.predict(input_data)[0]
+if st.button("🔮 Predict Health Outcomes"):
+    input_val = [[pollutant_input]]
+    asthma_pred = asthma_model.predict(input_val)[0]
+    resp_pred = resp_model.predict(input_val)[0]
 
-    st.success(f"🫁 Predicted Asthma ED Visits Rate: **{pred_asthma:.2f}** per 10,000")
-    st.success(f"🏥 Predicted Respiratory Hospitalization Rate: **{pred_resp:.2f}** per 10,000")
+    st.success(f"🫁 Predicted Asthma ED Visits Rate: **{asthma_pred:.2f}** per 10,000")
+    st.success(f"🏥 Predicted Respiratory Hospitalization Rate: **{resp_pred:.2f}** per 10,000")
 
-    # Visualization
-    fig, ax = plt.subplots()
-    ax.bar(['Asthma ED Visits', 'Respiratory Hospitalizations'], [pred_asthma, pred_resp], color=['skyblue', 'salmon'])
-    ax.set_ylabel("Rate per 10,000 people")
-    ax.set_title("📊 Predicted Health Outcomes")
-    st.pyplot(fig)
+    # Chart
+    st.write("### 📊 Prediction Comparison")
+    chart_data = pd.DataFrame({
+        "Health Outcome": ["Asthma", "Respiratory"],
+        "Rate per 10,000": [asthma_pred, resp_pred]
+    })
+    st.bar_chart(chart_data.set_index("Health Outcome"))
