@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # Load and cache the data
 @st.cache_data
 def load_data():
-    return pd.read_csv("health_data.csv")
+    return pd.read_csv("merged_health_data.csv")
 
 df = load_data()
 df = df.dropna()
