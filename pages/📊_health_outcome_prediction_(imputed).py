@@ -10,7 +10,7 @@ import os
 import traceback
 
 # --- Configuration & Caching ---
-st.set_page_configi(layout="wide", page_title="Prediction Analysis")
+st.set_page_config(layout="wide", page_title="Prediction Analysis")
 
 # --- Constants ---
 BASE_PATH = os.path.join(os.path.dirname(__file__), '..', 'data')
